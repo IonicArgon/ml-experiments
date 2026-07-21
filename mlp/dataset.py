@@ -26,6 +26,8 @@ def idx_to_nparray(file):
 
 
 def to_ascii(image: np.typing.NDArray):
+    """for in-training visualization"""
+
     image = image.reshape((-1, 28))
     ramp = " .:-=+*#%@"
 
@@ -38,6 +40,8 @@ def to_ascii(image: np.typing.NDArray):
 
 
 class Loader:
+    """just a fancy class to wrap batches in an iterator"""
+
     def __init__(
         self,
         X: np.typing.NDArray,
@@ -69,13 +73,25 @@ class Loader:
 
 
 def load_mnist(data_dir, batch_size, val_size=5000, seed=0):
+    """
+    read the MNIST data and return three loaders:
+    - `train`: for the training loop
+    - `validate`: for validation during training
+    - `test`: for evaluation of the model
+    
+    all loaders use the same Loader class, but `train` shuffles on new epochs
+    """
+
     rng = np.random.default_rng(seed)
 
     raw_train_images = idx_to_nparray(f"{data_dir}/train-images-idx3-ubyte")
-    raw_train_labels = idx_to_nparray(f"{data_dir}/train-labels-idx1-ubyte").astype(np.int64)
+    raw_train_labels = idx_to_nparray(f"{data_dir}/train-labels-idx1-ubyte").astype(
+        np.int64
+    )
     raw_test_images = idx_to_nparray(f"{data_dir}/t10k-images-idx3-ubyte")
     test_labels = idx_to_nparray(f"{data_dir}/t10k-labels-idx1-ubyte").astype(np.int64)
 
+    # have to flatten and normalize the images for 784-input into mlp
     train_n = len(raw_train_labels)
     test_n = len(test_labels)
 
@@ -86,6 +102,7 @@ def load_mnist(data_dir, batch_size, val_size=5000, seed=0):
     train_images_perm = train_img_flat[perm]
     train_labels_perm = raw_train_labels[perm]
 
+    # create train/validate split
     train, validate = np.split(train_images_perm, [train_n - val_size])
     train_labels, validate_labels = np.split(train_labels_perm, [train_n - val_size])
 
@@ -100,6 +117,7 @@ if __name__ == "__main__":
     data_path = "./data"
     train, validate, test = load_mnist(data_path, 64)
 
+    # just a bunch of shape and data assertions
     assert train.X.shape == (55000, 784)
     assert train.X.max() == 1.0 and train.X.min() == 0.0
     assert train.X.dtype == np.float32
@@ -118,22 +136,42 @@ if __name__ == "__main__":
     assert test.y.dtype == np.int64
     assert len(test) == 157
 
-    # dir_images = "./data/t10k-images-idx3-ubyte"
-    # dir_labels = "./data/t10k-labels-idx1-ubyte"
+    # asserting that the first batch of each epoch does not equal the first
+    # batch of a previous epoch when shuffle = True
+    epoch_1_X, epoch_1_y = next(iter(train))
+    epoch_2_X, epoch_2_y = next(iter(train))
+    assert not np.array_equal(epoch_1_X, epoch_2_X) and not np.array_equal(
+        epoch_1_y, epoch_2_y
+    )
 
-    # images = idx_to_nparray(dir_images)
-    # labels = idx_to_nparray(dir_labels)
+    # inverse test on validate because it's not supposed to shuffle
+    epoch_1_X, epoch_1_y = next(iter(validate))
+    epoch_2_X, epoch_2_y = next(iter(validate))
+    assert np.array_equal(epoch_1_X, epoch_2_X) and np.array_equal(epoch_1_y, epoch_2_y)
 
-    # fig, axs = plt.subplots(3, 3)
+    # and assert that after a whole epoch, the bincounts align
+    acc = np.array([], dtype=np.int64)
+    for X, y in train:
+        acc = np.concat((acc, y), axis=None)
+    assert np.array_equal(np.bincount(train.y), np.bincount(acc))
 
-    # for row in range(3):
-    #     for col in range(3):
-    #         axs[row, col].imshow(
-    #             images[row * 3 + col], cmap="gray_r", interpolation="nearest"
-    #         )
-    #         axs[row, col].set_title(labels[row * 3 + col])
-    #         axs[row, col].set_axis_off()
-    #         to_ascii(images[row * 3 + col])
+    # visual confirmation that labels and images align
+    fig, axs = plt.subplots(5, 3)
 
-    # plt.tight_layout()
-    # plt.show()
+    for i, (X, y) in enumerate(train):
+        if i >= 5:
+            break
+
+        images = X.reshape((-1, 28, 28))[:3]
+        labels = y[:3]
+        for j, image in enumerate(images):
+            axs[i, j].imshow(image, cmap="gray_r", interpolation="nearest")
+            axs[i, j].set_title(f"Label: {labels[j]}")
+            axs[i, j].set_yticks([])
+            axs[i, j].set_xticks([])
+
+            if j == 0:
+                axs[i, j].set_ylabel(f"batch {i}")
+
+    plt.tight_layout()
+    plt.show()
