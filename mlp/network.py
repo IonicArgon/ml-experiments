@@ -39,11 +39,15 @@ class ReLU:
         pass
 
 
-def softmax_cross_entropy(logits: np.ndarray, y: np.ndarray):
-    # softmax logits to probabilities
+def softmax(logits: np.ndarray):
     z = logits - logits.max(axis=1, keepdims=True)
     exp = np.exp(z)
-    probs = exp / exp.sum(axis=1, keepdims=True)
+    return exp / exp.sum(axis=1, keepdims=True)
+
+
+def softmax_cross_entropy(logits: np.ndarray, y: np.ndarray):
+    # softmax logits to probabilities
+    probs = softmax(logits)
 
     # then calculate cross-entropy loss
     B = len(y)
